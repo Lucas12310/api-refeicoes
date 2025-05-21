@@ -1,0 +1,28 @@
+services:
+  api-node-refeicoes:
+    container_name: "api-node-refeicoes"
+    build: "."
+    restart: "unless-stopped"
+    environment:
+      NODE_ENV: development
+      PORT: 3100
+      DB_URL: ${MONGODB_URI}
+      SALT_LENGTH: ${SALT}
+      JWT_SECRET: ${PRIVATE_KEY}
+      JWT_EXPIRATION_ACCESS_TOKEN: ${JWT_EXPIRATION_ACCESS_TOKEN}
+      JWT_EXPIRATION_REFRESH_TOKEN: ${JWT_EXPIRATION_REFRESH_TOKEN}
+      HOST: ${HOST}
+      PASS: ${PASS}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_NAME: ${ADMIN_NAME}
+      DEBUG: true
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./data:/node-app/data
+    env_file:
+      - .env
+
+# docker-compose up --build
+# Preciso criar um usuário genérico no MONGODB para não expor o usuário root

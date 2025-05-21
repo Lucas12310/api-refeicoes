@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sistema-de-refeicoes-api
+spec:
+  selector:
+    matchLabels:
+      app: sistema-de-refeicoes-api
+  template:
+    metadata:
+      labels:
+        app: sistema-de-refeicoes-api
+    spec:
+      # O secret 'regcred' contém as credenciais para ser possível acessar
+      # imagens docker do registry privado do fslab (registry.fslab.dev)
+      imagePullSecrets:
+      - name: regcred
+      containers:
+      - name: sistema-de-refeicoes-api
+        image: thalyssoemanoel/sistema-de-refeicoes:latest
+        resources: {}
+        ports:
+        - containerPort: 3100
+        env:
+        - name: "DEBUGLOG"
+          value: "false"
+        - name: "SWAGGER_PROD_URL"
+          value: "https://sistema-de-refeicoes-api.app.fslab.dev"
+        - name: DB_URL
+          value: "mongodb+srv://generico:generico123321@sistema-refeicoes.fr8bto6.mongodb.net/Sistema-de-refeicoes"
+        - name: JWT_SECRET
+          value: "11LQ01"
+        - name: PORT
+          value: "3100"
+        - name: NODE_ENV
+          value: "production"
+        - name: SALT_LENGTH
+          value: "16"
+        - name: JWT_EXPIRATION_ACCESS_TOKEN
+          value: "15m"
+        - name: JWT_EXPIRATION_REFRESH_TOKEN
+          value: "7h"
+        - name: HOST
+          value: "servicospublicosemail@gmail.com"
+        - name: PASS
+          value: "ttoa sspj pxpn fnob"
+        - name: ADMIN_EMAIL
+          value: "admin@gmail.com"
+        - name: ADMIN_PASSWORD
+          value: "Admin123@abc"
+        - name: ADMIN_NAME
+          value: "Admin"
+        - name: DEBUG
+          value: "false"
+        # - name: DB_URL
+        #   valueFrom:
+        #     configMapKeyRef:
+        #       name: panela-mongodb-configmap
+        #       key: DB_URL_USUARIOS
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sistema-de-refeicoes-api
+spec:
+  type: ClusterIP
+  selector:
+    app: sistema-de-refeicoes-api
+  ports:
+  - port: 80
+    targetPort: 3100

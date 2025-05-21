@@ -1,0 +1,128 @@
+# Exemplo completo (testes, build e deploy) de Arquivo .gitlab-ci.yml
+# A ideia é demonstrar como funciona esta configuração
+# para então ser possível realizar o CI/CD de qualquer
+# aplicação que você queira
+
+variables:
+  IMAGEM_DOCKER: thalyssoemanoel/sistema-de-refeicoes:latest 
+
+# Aqui se definem os estágios que poderão ser executados
+# Os Jobs que fazer parte de um estágio podem executar ao mesmo tempo, porém
+# todos os Jobs do estágio devem ser finalizados antes de prosseguir ao próximo
+# Sendo assim caso um Job dependa do outro, devem ser de estágios diferentes 
+stages:
+  - build
+  - test
+  - deploy
+  
+# Este Job irá executar todos os testes da aplicação
+# A ideia é que se os testes falharem os próximos Jobs não serão executados
+testar-app:
+  stage: test
+  # será utilizada a imagem do node para este Job, permitindo executar npm install e tudo mais
+  image: node:20-bullseye
+  # As "regras" estão funcionando da seguinte forma:
+  # - Se o Job for executado na branch develop, ele sempre será executado
+  # - Se o Job for executado em um merge request para a branch develop, ele sempre será executado
+  # - Se o Job for executado em um merge request para a branch master, ele sempre será executado
+  # - Se o Job for executado em qualquer outro lugar, ele não será executado
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      allow_failure: false
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"'
+      allow_failure: false
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
+      allow_failure: false
+      when: always
+    - when: never
+  variables:
+    DB_URL_TEST: $DB_URL_TEST
+    JWT_SECRET: $JWT_SECRET
+  script:
+    #- cat <<EOF > .env # Ao usar isso eu poderei remover o echo, inclusive, os echos abaixo servem apenas para visualizar o que está sendo gerado/ testando
+    - echo "DB_URL=$DB_URL" >> .env
+    - echo "DB_URL_TEST=$DB_URL_TEST" >> .env
+    - echo "PORT=$PORT" >> .env
+    - echo "NODE_ENV=$NODE_ENV" >> .env
+    - echo "SALT_LENGTH=$SALT_LENGTH" >> .env
+    - echo "JWT_EXPIRATION_ACCESS_TOKEN=$JWT_EXPIRATION_ACCESS_TOKEN" >> .env
+    - echo "JWT_EXPIRATION_REFRESH_TOKEN=$JWT_EXPIRATION_REFRESH_TOKEN" >> .env
+    - echo "JWT_SECRET=$JWT_SECRET" >> .env
+    - echo "HOST=$HOST" >> .env
+    - echo "PASS=$PASS" >> .env
+    - echo "ADMIN_EMAIL=$ADMIN_EMAIL" >> .env
+    - echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
+    - echo "ADMIN_NAME=$ADMIN_NAME" >> .env
+    - echo "DEBUG=$DEBUG" >> .env
+    # EOF
+
+    - npm install
+
+    - npm run seed
+
+    - npm run test
+
+buildar-docker-api:
+  stage: build
+  image: docker:dind
+  rules: #Tirar esse rules quando eu conseguir fazer o deploy e colocar o 
+  #  only:
+  #  - maste
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"'
+      when: always
+    - when: never
+  script:
+    - cp .env.example .env
+    - echo "DB_URL_TEST=${DB_URL_TEST}" >> .env
+    - docker build -t $IMAGEM_DOCKER .
+    - docker push $IMAGEM_DOCKER
+    - ls -la
+    - cat .env
+
+
+fazer-deploy:
+  stage: deploy
+  needs: ["buildar-docker-api"]
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: ['']
+  rules: #Tirar esse rules quando eu conseguir fazer o deploy e colocar o 
+  #  only:
+  #  - master
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"'
+      when: always
+    - when: never
+  script:
+    - cat $KUBECTL_CONFIG > ~/.kube/config
+    
+    - kubectl get pods
+
+    - kubectl config get-contexts
+    # - kubectl get node # essa linha é para visualizar os nodes do cluster, os nodes são as máquinas que estão rodando o cluster
+    # - kubectl get pods # Essa permite ver os pods que estão rodando no cluster
+
+    # Primeiro remove o deployment que estava em execução anteriormente.
+    - kubectl delete deployment sistema-de-refeicoes-api || true
+
+    # Dependendo da situação seria interessante esperar um pouco antes de aplicar novamente
+    # para impedir que por um curto período de tempo existam as duas aplicações (antiga e nova) em execução
+    - sleep 10
+
+    - cat ~/.kube/config
+
+    # Aplica o deployment no cluster
+    - kubectl apply -f deploy/api-sistema-de-refeicoes-deployment.yaml
+
+    # DEPOIS: VER UM JEITO DE ESPERAR SÓ O NECESSÁRIO E NÃO CHUTANDO ALTO ASSIM
+    - sleep 60
+    
+    # Log para ver se deu certo (E ver o erro caso não tenha dado)
+    - kubectl get pods
+    - kubectl describe deploy/sistema-de-refeicoes-api
+    - kubectl logs deploy/sistema-de-refeicoes-api
